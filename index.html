@@ -35,8 +35,8 @@ body{font-family:'Plus Jakarta Sans',system-ui,sans-serif}
   </div>
   <div class="flex gap-2 flex-wrap justify-between items-center">
    <h3 class="text-sm font-extrabold uppercase">Danh sách dự án</h3>
-   <div class="flex gap-2"><button id="l-new" onclick="newProject()" class="bg-brand-900 text-white px-3 py-1.5 rounded-xl text-xs font-bold hidden">+ Dự án mới</button>
-   <button onclick="importModal()" class="bg-emerald-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold">Nhập báo giá Excel</button></div>
+   <div class="flex gap-2 flex-wrap"><button id="l-new" onclick="newProject()" class="bg-brand-900 text-white px-3 py-1.5 rounded-xl text-xs font-bold hidden">+ Dự án mới</button>
+   <button onclick="importModal()" class="bg-emerald-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold">Nhập báo giá Excel</button><button id="l-staff" onclick="staffModal()" class="bg-indigo-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold hidden">Lương theo người</button><button id="l-cal" onclick="calModal()" class="bg-amber-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold hidden">Lịch chung</button></div>
   </div>
   <div id="l-list" class="grid md:grid-cols-2 gap-4"></div>
   <div id="l-owner" class="hidden grid md:grid-cols-3 gap-4 pt-4 border-t border-brand-200"></div>
@@ -116,7 +116,7 @@ function saveRow(e,coll,id){
  e.preventDefault();const p=proj(),o={};
  S[coll].forEach(([k,,t])=>{const v=$('f-'+k).value.trim();o[k]=t==='number'?num(v):v});
  if(id)Object.assign(p[coll].find(x=>x.id===id),o);else{o.id=PFX[coll]+'-'+Date.now();if(coll==='checklist')o.checked=false;p[coll].push(o)}
- save();closeModal();renderTab();toast('Đã lưu!')}
+ save();closeModal();renderTab();toast('Đã lưu!');if(role==='OWNER'&&(coll==='schedule'||coll==='timesheets')){const d=calData(),n=d.conf.length+d.dbl.length;if(n)setTimeout(()=>toast('⚠ Có '+n+' cảnh báo trùng nhân sự. Mở "Lịch chung" để xem.'),1800)}}
 function delRow(coll,id){$('modal').innerHTML=box('Xác nhận xóa',`<p class="text-sm">Bạn chắc chắn muốn xóa bản ghi này? Không thể hoàn tác.</p><div class="flex gap-2 justify-end"><button onclick="closeModal()" class="bg-brand-100 px-4 py-2 rounded-xl text-xs font-bold uppercase">Hủy</button>${btn('Xóa',`doDel('${coll}','${id}')`,'bg-red-700')}</div>`)}
 function doDel(coll,id){const p=proj();p[coll]=p[coll].filter(x=>x.id!==id);save();closeModal();renderTab();toast('Đã xóa!')}
 
@@ -245,6 +245,51 @@ async function reloadCloud(){
   projects=d.projects;if(!projects.some(p=>p.id===cur)&&projects[0])cur=projects[0].id;render();toast('Đã tải dữ liệu mới từ Google Sheets')}catch(e){toast('Lỗi: '+e.message)}}
 $('cloud-url').value=cloudUrl();
 
+/* ---------- Lương theo người & Lịch chung (nhiều dự án) ---------- */
+let staffRows=[];
+function staffMonth(ym){
+ const m={};
+ projects.forEach(p=>{
+  const last={};p.timesheets.forEach(t=>{if(!last[t.staffId]||last[t.staffId]<t.date)last[t.staffId]=t.date});
+  p.timesheets.filter(t=>!ym||String(t.date).startsWith(ym)).forEach(t=>{
+   const s=m[t.staffId]||(m[t.staffId]={id:t.staffId,name:t.staffName,hours:0,ot:0,wage:0,allow:0,projs:{}});
+   s.hours+=num(t.hours);s.ot+=num(t.otHours);s.wage+=tsPay(t);
+   const q=s.projs[p.id]||(s.projs[p.id]={title:p.title,h:0});q.h+=num(t.hours)+num(t.otHours)});
+  payroll(p).forEach(x=>{if(m[x.id]&&(!ym||String(last[x.id]).startsWith(ym)))m[x.id].allow+=x.transport+x.bonus+x.other})});
+ return Object.values(m)}
+function staffModal(ym){
+ if(role!=='OWNER')return;
+ if(ym===undefined){const ds=projects.flatMap(p=>p.timesheets.map(t=>String(t.date).slice(0,7))).filter(Boolean).sort();ym=ds.length?ds[ds.length-1]:new Date().toISOString().slice(0,7)}
+ staffRows=staffMonth(ym);const tot=staffRows.reduce((s,x)=>s+x.wage+x.allow,0);
+ $('modal').innerHTML=box('Bảng lương theo người (gộp nhiều dự án)',`<div class="flex flex-wrap gap-3 items-center text-xs font-bold"><label>Tháng</label><input type="month" value="${esc(ym)}" onchange="staffModal(this.value)" class="px-3 py-2 bg-brand-50 border border-brand-200 rounded-xl"><button onclick="staffModal('')" class="underline">Xem tất cả</button>${btn('Xuất Excel','staffXlsx()','bg-indigo-700')}</div>`+
+  table([{h:'Mã NV',f:s=>esc(s.id)},{h:'Họ tên',f:s=>`<b>${esc(s.name)}</b>${Object.keys(s.projs).length>1?` <span class="px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px]">${Object.keys(s.projs).length} dự án</span>`:''}`},{h:'Dự án (giờ)',f:s=>Object.values(s.projs).map(q=>`${esc(q.title)} (${q.h}h)`).join('<br>')},{h:'Giờ',cls:'text-center',f:s=>`${s.hours}h (${s.ot}h OT)`},{h:'Lương giờ công',cls:'text-right',f:s=>money(s.wage)},{h:'Phụ cấp & thưởng',cls:'text-right',f:s=>money(s.allow)},{h:'Tổng',cls:'text-right font-extrabold text-emerald-700',f:s=>money(s.wage+s.allow)}],staffRows,
+  `<tfoot><tr class="bg-brand-100 font-extrabold"><td colspan="6" class="p-3">TỔNG</td><td class="p-3 text-right text-emerald-700">${money(tot)}</td></tr></tfoot>`)+
+  `<p class="text-[11px] text-brand-800">Lương giờ công tính theo ngày chấm công trong tháng (OT nhân 1,5). Xăng xe, thưởng và khoản khác nhập theo từng dự án nên được tính vào tháng có ngày chấm công cuối cùng của người đó trong dự án.</p>`,'max-w-5xl')}
+function staffXlsx(){
+ const a=[['Mã NV','Họ tên','Dự án','Giờ','Giờ OT','Lương giờ công','Phụ cấp & thưởng','Tổng']].concat(staffRows.map(s=>[s.id,s.name,Object.values(s.projs).map(q=>q.title+' ('+q.h+'h)').join('; '),s.hours,s.ot,s.wage,s.allow,s.wage+s.allow]));
+ const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(a),'LuongTheoNguoi');
+ try{XLSX.writeFile(wb,'DeeTale_LuongTheoNguoi.xlsx');toast('Đã xuất file Excel')}catch(e){toast('Trình duyệt chặn tải file')}}
+function calData(){
+ const items=[];projects.forEach(p=>p.schedule.forEach(s=>{if(s.startDate&&s.endDate)items.push({p:p.title,pid:p.id,cat:s.category,a:s.startDate,b:s.endDate,staff:String(s.staff||'').split(/[,;]+/).map(x=>x.trim()).filter(Boolean),flag:false,closed:p.status==='Đã đóng'})}));
+ items.sort((x,y)=>x.a.localeCompare(y.a));
+ const conf=[];
+ for(let i=0;i<items.length;i++)for(let j=i+1;j<items.length;j++){const x=items[i],y=items[j];if(x.pid===y.pid||x.closed||y.closed)continue;
+  if(x.a<=y.b&&y.a<=x.b){const sh=x.staff.filter(n=>y.staff.some(m=>m.toLowerCase()===n.toLowerCase()));if(sh.length){x.flag=y.flag=true;conf.push({names:sh,x,y})}}}
+ const day={};projects.forEach(p=>p.status!=='Đã đóng'&&p.timesheets.forEach(t=>{const k=t.staffId+'|'+t.date;(day[k]=day[k]||[]).push({p:p.title,pid:p.id,h:num(t.hours)+num(t.otHours),n:t.staffName,d:t.date})}));
+ const dbl=Object.values(day).filter(a=>new Set(a.map(z=>z.pid)).size>1);
+ const g={};projects.forEach(p=>{if(p.date&&p.status!=='Đã đóng')(g[p.date]=g[p.date]||[]).push(p)});
+ return {items,conf,dbl,sameDay:Object.values(g).filter(a=>a.length>1)}}
+function calModal(){
+ if(role!=='OWNER')return;
+ const {items,conf,dbl,sameDay}=calData();
+ const w=conf.map(c=>`<li>⚠ <b>${esc(c.names.join(', '))}</b> bị xếp trùng: ${esc(c.x.p)} – ${esc(c.x.cat)} (${fd(c.x.a)}–${fd(c.x.b)}) và ${esc(c.y.p)} – ${esc(c.y.cat)} (${fd(c.y.a)}–${fd(c.y.b)})</li>`)
+  .concat(dbl.map(a=>`<li>⚠ <b>${esc(a[0].n)}</b> chấm công ngày ${fd(a[0].d)} ở ${a.length} dự án: ${a.map(z=>esc(z.p)+' ('+z.h+'h)').join(', ')} — tổng ${a.reduce((s,z)=>s+z.h,0)}h</li>`))
+  .concat(sameDay.map(g=>`<li>⚠ Cùng ngày tổ chức ${fd(g[0].date)}: ${g.map(x=>esc(x.title)).join(' • ')}</li>`));
+ $('modal').innerHTML=box('Lịch chung tất cả dự án',
+  (w.length?`<ul class="space-y-1 text-xs bg-amber-50 border border-amber-200 rounded-xl p-3">${w.join('')}</ul>`:'<p class="text-xs bg-emerald-50 border border-emerald-200 rounded-xl p-3 font-bold text-emerald-800">Không có trùng lịch nhân sự hay ngày tổ chức.</p>')+
+  table([{h:'',f:r=>r.flag?'⚠':''},{h:'Từ ngày',f:r=>fd(r.a)},{h:'Đến ngày',f:r=>fd(r.b)},{h:'Dự án',f:r=>`<b>${esc(r.p)}</b>${r.closed?' <span class="text-[10px] text-red-700">(đã đóng)</span>':''}`},{h:'Hạng mục',f:r=>esc(r.cat)},{h:'Nhân sự',f:r=>esc(r.staff.join(', '))}],items)+
+  '<p class="text-[11px] text-brand-800">Trùng lịch = cùng tên nhân sự trong ô "Nhân sự phụ trách" của hai dự án khác nhau có khoảng ngày giao nhau. Hãy ghi tên thống nhất (ví dụ luôn là "A Lộc") và phân cách bằng dấu phẩy.</p>','max-w-5xl')}
+
 let pend=null,lastImport=null;
 const qKey=q=>[q.category,q.name,q.originalPrice].join('|').toLowerCase();
 function previewImport(p,items){
@@ -286,7 +331,7 @@ async function login(e){e.preventDefault();const v=$('pass').value.trim();$('pas
 function logout(){role=access=sessPass=null;closeModal();$('login').classList.remove('hidden');$('landing').classList.add('hidden')}
 function openLanding(){
  if(!role)return;$('landing').classList.remove('hidden');const owner=role==='OWNER';
- $('l-role').textContent='Vai trò: '+role;$('l-new').classList.toggle('hidden',!owner);$('l-owner').classList.toggle('hidden',!owner);
+ $('l-role').textContent='Vai trò: '+role;$('l-new').classList.toggle('hidden',!owner);$('l-staff').classList.toggle('hidden',!owner);$('l-cal').classList.toggle('hidden',!owner);$('l-owner').classList.toggle('hidden',!owner);
  if(owner){let r=0,c=0;projects.forEach(p=>{const s=stats(p);r+=s.rev;c+=s.cost});$('l-owner').innerHTML=card('Tổng thu nhập',money(r),'text-emerald-700')+card('Tổng chi phí',money(c),'text-amber-700')+card('Lợi nhuận studio',money(r-c),'text-blue-700')}
  const list=owner?projects:projects.filter(p=>p.id===access);
  $('l-list').innerHTML=list.map(p=>`<div class="bg-brand-50 p-5 rounded-2xl border border-brand-200 space-y-3"><div class="flex justify-between"><span class="px-2.5 py-1 rounded-lg text-[10px] font-bold ${p.status==='Đang hoạt động'?'bg-emerald-100 text-emerald-800':'bg-red-100 text-red-800'}">${esc(p.status)}</span><span class="text-xs font-bold">${fd(p.date)}</span></div><h4 class="font-extrabold text-sm">${esc(p.title)}</h4><p class="text-xs">Khách: ${esc(p.client)} | ${esc(p.location)}</p><button onclick="enter('${p.id}')" class="w-full bg-brand-900 text-white py-2.5 rounded-xl font-bold text-xs uppercase">Vào quản lý →</button></div>`).join('')||'<p class="col-span-2 text-center">Không có dự án.</p>'}
