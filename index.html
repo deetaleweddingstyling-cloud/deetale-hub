@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>DeeTale Production Hub</title>
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/lucide/0.263.1/lucide.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap" rel="stylesheet">
+<script>tailwind.config={theme:{extend:{colors:{brand:{50:'#fdf8f6',100:'#fbe8e6',200:'#f5d3d0',800:'#8b3a32',900:'#6b2b25',950:'#431915'}}}}}</script>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{font-family:'Plus Jakarta Sans',system-ui,sans-serif}
+</style>
+</head>
+<body class="bg-brand-50 text-brand-900 min-h-screen">
+
+<div id="login" class="fixed inset-0 bg-brand-950/90 z-50 flex items-center justify-center p-4">
+ <form onsubmit="login(event)" class="bg-white rounded-3xl p-8 max-w-md w-full space-y-4 shadow-2xl">
+  <h2 class="text-xl font-extrabold uppercase text-center">DeeTale Hub</h2>
+  <p class="text-xs text-center text-brand-800">Hệ thống quản lý sản xuất đa dự án</p>
+  <input id="pass" type="password" required autocomplete="new-password" placeholder="Nhập mật khẩu..." class="w-full px-4 py-3 bg-brand-50 border border-brand-200 rounded-xl text-sm font-bold">
+  <input id="cloud-url" placeholder="URL Apps Script (…/exec) — bỏ trống để dùng chế độ offline" class="w-full px-4 py-2.5 bg-brand-50 border border-brand-200 rounded-xl text-xs font-bold">
+  <button class="w-full bg-brand-900 hover:bg-brand-800 text-white py-3 rounded-xl font-extrabold text-xs uppercase">Đăng nhập</button>
+  <p class="text-[11px] text-brand-800 text-center">Demo: mật khẩu dự án mẫu là <b>123</b></p>
+ </form>
+</div>
+
+<div id="landing" class="fixed inset-0 bg-brand-50 z-40 overflow-y-auto p-4 hidden">
+ <div class="max-w-4xl mx-auto bg-white rounded-3xl p-6 shadow-xl border border-brand-200 space-y-5">
+  <div class="flex flex-wrap justify-between items-center gap-3 border-b border-brand-200 pb-4">
+   <h2 class="text-xl font-extrabold uppercase">DeeTale Studio</h2>
+   <div class="flex gap-2 items-center"><span id="l-role" class="px-3 py-1.5 bg-brand-900 text-white text-xs font-bold rounded-xl"></span><button onclick="logout()" class="bg-brand-100 px-3 py-1.5 text-xs font-bold rounded-xl">Đăng xuất</button></div>
+  </div>
+  <div class="flex gap-2 flex-wrap justify-between items-center">
+   <h3 class="text-sm font-extrabold uppercase">Danh sách dự án</h3>
+   <div class="flex gap-2"><button id="l-new" onclick="newProject()" class="bg-brand-900 text-white px-3 py-1.5 rounded-xl text-xs font-bold hidden">+ Dự án mới</button>
+   <button onclick="importModal()" class="bg-emerald-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold">Nhập báo giá Excel</button></div>
+  </div>
+  <div id="l-list" class="grid md:grid-cols-2 gap-4"></div>
+  <div id="l-owner" class="hidden grid md:grid-cols-3 gap-4 pt-4 border-t border-brand-200"></div>
+ </div>
+</div>
+
+<header class="bg-brand-900 text-white">
+ <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap justify-between items-center gap-3">
+  <div class="flex items-center gap-3"><button onclick="openLanding()" class="bg-brand-800 px-3 py-2 rounded-xl text-sm" title="Về trang Studio">←</button>
+  <div><h1 class="font-extrabold text-base">DeeTale Production Hub</h1><p class="text-[11px] text-brand-200">Quản lý sản xuất đa dự án</p></div></div>
+  <div class="flex gap-2 items-center text-xs font-bold"><span id="role-text"></span><button id="btn-lock" onclick="toggleLock()" class="bg-amber-700 px-3 py-2 rounded-xl hidden"></button></div>
+ </div>
+</header>
+
+<main class="max-w-7xl mx-auto px-4 py-6 space-y-4">
+ <div class="bg-white rounded-2xl p-4 border border-brand-200 flex flex-wrap items-center justify-between gap-3">
+  <div class="flex items-center gap-3 flex-wrap"><select id="sel" onchange="cur=this.value;render()" class="bg-brand-50 border border-brand-200 font-bold text-sm rounded-xl px-3 py-2"></select><span id="badge"></span></div>
+  <button onclick="exportXlsx()" class="bg-indigo-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold">Sao lưu Excel</button><button id="btn-restore" onclick="restoreModal()" class="bg-red-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold hidden">Khôi phục từ Excel</button>
+  <div id="meta" class="w-full text-xs text-brand-800 pt-2 border-t border-brand-100"></div>
+ </div>
+ <div id="tabs" class="flex gap-1.5 overflow-x-auto border-b border-brand-200 pb-1"></div>
+ <div id="content" class="bg-white rounded-2xl border border-brand-200 p-5 min-h-[400px]"></div>
+</main>
+
+<div id="modal"></div>
+<div id="toast" class="fixed bottom-5 right-5 bg-brand-900 text-white px-5 py-3 rounded-xl text-xs font-bold opacity-0 transition z-[60] pointer-events-none"></div>
+
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+const money=n=>new Intl.NumberFormat('vi-VN',{style:'currency',currency:'VND'}).format(n||0);
+const num=v=>Number(v)||0;
+const fd=d=>/^\d{4}-\d{2}-\d{2}/.test(d)?d.slice(8,10)+'/'+d.slice(5,7)+'/'+d.slice(0,4):esc(d||'');
+const toISO=d=>{const m=/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(d||'').trim());return m?`${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`:d};
+const sortBy=(a,k)=>[...a].sort((x,y)=>String(x[k]).localeCompare(String(y[k])));
+const tsPay=t=>num(t.hourlyRate)*(num(t.hours)+1.5*num(t.otHours));
+
+const DEFAULT=[{id:'proj-tri-thao-2024',title:'Tiệc Tân Hôn: Hải Trí & Thu Thảo',client:'Hải Trí & Thu Thảo',date:'11/12/2026',location:'Tư gia Quận 2 (Số 9 đường số 58, P. Thạnh Mỹ Lợi)',status:'Đang hoạt động',projectPassword:'123',appScriptUrl:'',driveFolderLink:'',
+ quotations:[{id:'q-1',category:'WELCOME SIGN',name:'Bảng formex sơn hiệu ứng đỏ 170x80cm',qty:1,unit:'Gói',originalPrice:8500000,actualPrice:8500000,note:''},
+ {id:'q-2',category:'CỔNG HOA',name:'Trụ hoa cao 300 cm & 240 cm',qty:1,unit:'Gói',originalPrice:47000000,actualPrice:23000000,note:'Thêm lá'},
+ {id:'q-3',category:'BACKDROP',name:'Backdrop chính dập hộp dán viền led + phụ',qty:1,unit:'Gói',originalPrice:50050000,actualPrice:42500000,note:''}],
+ checklist:[{id:'chk-1',category:'TALKSHOW',item:'Lá',qty:'1',personInCharge:'Anh Kiệt',location:'Chợ Hồ Thị Kỷ',checked:false,note:'Mua sớm hoa tươi'}],
+ schedule:[{id:'sch-1',startDate:'2026-12-08',endDate:'2026-12-10',category:'Thi công phần cứng',detail:'Cắt formex, sơn chi tiết tại kho',staff:'A Lộc, A Luân',progress:80,status:'Đang thực hiện'}],
+ timesheets:[{id:'ts-1',date:'2026-12-07',staffName:'A LỘC',staffId:'ST001',hourlyRate:80000,hours:4.5,otHours:0,note:'Thi công tại kho'}],
+ expenses:[{id:'ex-1',category:'Phần cứng',date:'2026-12-07',detail:'Formex & cắt CNC',amount:1630000,note:'Đã thanh toán hóa đơn'}],customPayroll:{}}];
+
+let projects;
+try{projects=JSON.parse(localStorage.getItem('deetale_projects'))||DEFAULT}catch(e){projects=DEFAULT}
+projects.forEach(p=>{p.date=toISO(p.date);(p.schedule||[]).forEach(s=>{s.startDate=toISO(s.startDate);s.endDate=toISO(s.endDate)});(p.timesheets||[]).forEach(t=>t.date=toISO(t.date));(p.expenses||[]).forEach(t=>t.date=toISO(t.date))});
+let role=null,access=null,cur=DEFAULT[0].id,tab='overview';
+const save=pp=>{try{localStorage.setItem('deetale_projects',JSON.stringify(projects))}catch(e){}autoSync(pp)};
+const proj=()=>projects.find(p=>p.id===cur)||projects[0];
+function toast(m){const t=$('toast');t.textContent=m;t.classList.remove('opacity-0');setTimeout(()=>t.classList.add('opacity-0'),2600)}
+const icons=()=>window.lucide&&lucide.createIcons&&lucide.createIcons();
+
+/* ---------- Schema ---------- */
+const S={
+ quotations:[['category','Hạng mục'],['name','Tên công việc / vật tư'],['qty','Số lượng','number',1],['unit','ĐVT','text','Gói'],['originalPrice','Đơn giá gốc','number',0],['actualPrice','Đơn giá thực tế','number',0],['note','Ghi chú']],
+ checklist:[['category','Hạng mục'],['item','Vật tư / thiết bị'],['qty','Số lượng','text','1'],['personInCharge','Phụ trách','text','Anh Kiệt'],['location','Vị trí / kho','text','Kho DeeTale'],['note','Ghi chú']],
+ schedule:[['startDate','Từ ngày','date'],['endDate','Đến ngày','date'],['category','Hạng mục'],['detail','Chi tiết công việc'],['staff','Nhân sự phụ trách'],['progress','Tiến độ (%)','number',0],['status','Trạng thái','select',['Đang thực hiện','Hoàn thành']]],
+ timesheets:[['date','Ngày','date'],['staffId','Mã nhân sự'],['staffName','Họ tên'],['hourlyRate','Đơn giá/giờ','number',80000],['hours','Số giờ','number',8],['otHours','Giờ OT','number',0],['note','Ghi chú']],
+ expenses:[['date','Ngày chi','date'],['category','Hạng mục'],['detail','Nội dung'],['amount','Số tiền (VNĐ)','number',0],['note','Ghi chú']]
+};
+const PFX={quotations:'q',checklist:'chk',schedule:'sch',timesheets:'ts',expenses:'ex'};
+
+function formModal(coll,id){
+ const p=proj(),row=id?p[coll].find(x=>x.id===id):null;
+ const f=S[coll].map(([k,l,t='text',d])=>{
+  const v=row?row[k]:(t==='select'?'':d??'');
+  const inp=t==='select'?`<select id="f-${k}" class="w-full px-3 py-2 bg-brand-50 border border-brand-200 rounded-xl text-xs font-bold">${d.map(o=>`<option ${o===v?'selected':''}>${o}</option>`).join('')}</select>`
+   :`<input id="f-${k}" type="${t}" value="${esc(v)}" ${t!=='text'||k==='category'?'':''} class="w-full px-3 py-2 bg-brand-50 border border-brand-200 rounded-xl text-xs font-bold">`;
+  return `<div><label class="block text-[11px] font-bold uppercase text-brand-800 mb-1">${l}</label>${inp}</div>`}).join('');
+ $('modal').innerHTML=box(`${id?'Sửa':'Thêm'} bản ghi`,`<form onsubmit="saveRow(event,'${coll}','${id||''}')" class="space-y-3" autocomplete="off">${f}<button class="w-full bg-brand-900 text-white py-3 rounded-xl font-extrabold text-xs uppercase">Lưu</button></form>`)}
+function box(title,body,w='max-w-md'){return `<div class="fixed inset-0 bg-brand-950/80 z-50 flex items-center justify-center p-4"><div class="bg-white rounded-3xl p-6 ${w} w-full max-h-[90vh] overflow-y-auto space-y-4"><div class="flex justify-between items-center"><h3 class="font-extrabold text-sm uppercase">${title}</h3><button onclick="closeModal()" class="text-sm font-bold">Đóng ✕</button></div>${body}</div></div>`}
+function closeModal(){$('modal').innerHTML=''}
+function saveRow(e,coll,id){
+ e.preventDefault();const p=proj(),o={};
+ S[coll].forEach(([k,,t])=>{const v=$('f-'+k).value.trim();o[k]=t==='number'?num(v):v});
+ if(id)Object.assign(p[coll].find(x=>x.id===id),o);else{o.id=PFX[coll]+'-'+Date.now();if(coll==='checklist')o.checked=false;p[coll].push(o)}
+ save();closeModal();renderTab();toast('Đã lưu!')}
+function delRow(coll,id){$('modal').innerHTML=box('Xác nhận xóa',`<p class="text-sm">Bạn chắc chắn muốn xóa bản ghi này? Không thể hoàn tác.</p><div class="flex gap-2 justify-end"><button onclick="closeModal()" class="bg-brand-100 px-4 py-2 rounded-xl text-xs font-bold uppercase">Hủy</button>${btn('Xóa',`doDel('${coll}','${id}')`,'bg-red-700')}</div>`)}
+function doDel(coll,id){const p=proj();p[coll]=p[coll].filter(x=>x.id!==id);save();closeModal();renderTab();toast('Đã xóa!')}
+
+/* ---------- Calculations ---------- */
+function payroll(p){
+ const m={};
+ p.timesheets.forEach(t=>{const s=m[t.staffId]||(m[t.staffId]={id:t.staffId,name:t.staffName,hours:0,ot:0,base:0,transport:0,bonus:0,other:0});
+  s.hours+=num(t.hours);s.ot+=num(t.otHours);s.base+=tsPay(t)});
+ Object.entries(p.customPayroll||{}).forEach(([sid,c])=>{if(m[sid])Object.assign(m[sid],c)});
+ const list=Object.values(m);list.forEach(s=>s.total=s.base+s.transport+s.bonus+s.other);return list}
+function stats(p){
+ const budget=p.quotations.reduce((s,q)=>s+num(q.originalPrice)*num(q.qty),0);
+ const rev=p.quotations.reduce((s,q)=>s+num(q.actualPrice)*num(q.qty),0);
+ const exp=p.expenses.reduce((s,e)=>s+num(e.amount),0);
+ const pay=payroll(p).reduce((s,x)=>s+x.total,0);
+ return {budget,rev,exp,pay,cost:exp+pay,profit:rev-exp-pay}}
+
+/* ---------- Tabs ---------- */
+const TABS=[['overview','Tổng quan'],['quotation','Bảng giá'],['checklist','Soạn kho'],['schedule','Lịch thi công'],['timesheet','Chấm công'],['payroll','Bảng lương'],['expenses','Chi phí & Drive'],['budget','Dự toán & lợi nhuận']];
+function drawTabs(){$('tabs').innerHTML=TABS.map(([k,l])=>`<button onclick="setTab('${k}')" class="px-4 py-2.5 rounded-t-xl font-bold text-xs uppercase whitespace-nowrap ${k===tab?'bg-white border border-b-0 border-brand-200':'text-brand-800'}">${l}</button>`).join('')}
+function setTab(k){const p=proj();if(p.status==='Đã đóng'&&role==='LEAD'&&k!=='overview')return toast('Dự án đã đóng!');tab=k;drawTabs();renderTab()}
+
+const card=(l,v,c='text-brand-900')=>`<div class="bg-brand-50 p-4 rounded-2xl border border-brand-200"><p class="text-[11px] font-bold uppercase text-brand-800">${l}</p><h3 class="text-xl font-extrabold mt-1 ${c}">${v}</h3></div>`;
+const btn=(t,fn,c='bg-brand-900')=>`<button onclick="${fn}" class="${c} text-white px-3.5 py-2 rounded-xl font-bold text-xs uppercase">${t}</button>`;
+const head=(t,actions)=>`<div class="flex justify-between items-center flex-wrap gap-3 mb-4"><h3 class="font-extrabold text-sm uppercase">${t}</h3><div class="flex gap-2">${actions}</div></div>`;
+function table(cols,rows,foot=''){
+ return `<div class="overflow-x-auto rounded-xl border border-brand-200"><table class="w-full text-left text-xs"><thead><tr class="bg-brand-100 uppercase font-extrabold">${cols.map(c=>`<th class="p-3 ${c.cls||''}">${c.h}</th>`).join('')}</tr></thead><tbody class="divide-y divide-brand-200">${rows.length?rows.map(r=>`<tr>${cols.map(c=>`<td class="p-3 ${c.cls||''}">${c.f(r)}</td>`).join('')}</tr>`).join(''):`<tr><td colspan="${cols.length}" class="p-6 text-center">Chưa có dữ liệu.</td></tr>`}</tbody>${foot}</table></div>`}
+const acts=coll=>({h:'Thao tác',cls:'text-center',f:r=>`<button onclick="formModal('${coll}','${r.id}')" class="text-blue-600 font-bold mr-2">Sửa</button><button onclick="delRow('${coll}','${r.id}')" class="text-red-600 font-bold">Xóa</button>`});
+
+function renderTab(){
+ const p=proj(),owner=role==='OWNER',st=stats(p),c=$('content');let h='';
+ if(tab==='overview'){
+  h=`<div class="space-y-5"><div class="grid md:grid-cols-4 gap-4">${card('Tổng ngân sách',money(st.budget))}${card('Doanh thu thực tế',money(st.rev),'text-emerald-700')}${card('Chi phí & lương',owner?money(st.cost):'******','text-amber-700')}${card('Lợi nhuận ước tính',owner?money(st.profit):'******',st.profit>=0?'text-blue-700':'text-red-700')}</div>
+  <div class="border border-brand-200 rounded-2xl p-5 space-y-3"><h3 class="font-extrabold text-sm uppercase">Google Sheets Sync (Apps Script)</h3>
+  <input id="as-url" value="${esc(cloudUrl())}" placeholder="https://script.google.com/macros/s/.../exec" class="w-full px-4 py-2.5 bg-brand-50 border border-brand-200 rounded-xl text-xs font-bold">
+  <div class="flex gap-2">${btn('Lưu URL','saveUrl()')}${btn('Đẩy lên Sheet','syncNow()','bg-emerald-700')}${btn('Tải lại từ Sheet','reloadCloud()','bg-indigo-700')}</div>
+  <p class="text-[11px] text-brand-800">Lưu ý: trang được host ở đây chặn kết nối ra ngoài nên đồng bộ chỉ hoạt động khi bạn dùng file HTML trên hosting riêng.</p></div></div>`}
+ if(tab==='quotation'){
+  const o=p.quotations.reduce((s,q)=>s+num(q.originalPrice)*num(q.qty),0);
+  h=head(`Bảng giá (${p.quotations.length})`,(lastImport&&lastImport.pid===p.id?btn('Hoàn tác nhập','undoImport()','bg-amber-700'):'')+btn('Nhập Excel',`importModal('${p.id}')`,'bg-emerald-700')+btn('+ Thêm',"formModal('quotations')"))+
+  table([{h:'Hạng mục',f:r=>`<b>${esc(r.category)}</b>`},{h:'Tên công việc',f:r=>esc(r.name)},{h:'SL',cls:'text-center',f:r=>r.qty},{h:'ĐVT',f:r=>esc(r.unit)},{h:'Giá gốc',cls:'text-right',f:r=>money(r.originalPrice)},{h:'Thực tế',cls:'text-right text-emerald-700 font-bold',f:r=>money(r.actualPrice)},{h:'Ghi chú',f:r=>esc(r.note)||'-'},acts('quotations')],p.quotations,
+  `<tfoot><tr class="bg-brand-100 font-extrabold"><td colspan="4" class="p-3">TỔNG</td><td class="p-3 text-right">${money(o)}</td><td class="p-3 text-right text-emerald-700">${money(st.rev)}</td><td colspan="2"></td></tr></tfoot>`)}
+ if(tab==='checklist'){
+  h=head('Checklist soạn kho',btn('Copy từ báo giá','copyQuote()','bg-indigo-700')+btn('+ Thêm',"formModal('checklist')"))+
+  table([{h:'Xong',cls:'text-center',f:r=>`<input type="checkbox" ${r.checked?'checked':''} onchange="toggleChk('${r.id}')">`},{h:'Hạng mục',f:r=>esc(r.category)},{h:'Vật tư',f:r=>`<span class="${r.checked?'line-through text-gray-400':''}">${esc(r.item)}</span>`},{h:'SL',cls:'text-center',f:r=>esc(r.qty)},{h:'Phụ trách',f:r=>esc(r.personInCharge)},{h:'Vị trí',f:r=>esc(r.location)},{h:'Ghi chú',f:r=>esc(r.note)||'-'},acts('checklist')],p.checklist)}
+ if(tab==='schedule'){
+  h=head('Lịch thi công (Timeline)',btn('+ Thêm giai đoạn',"formModal('schedule')"))+`<div class="bg-brand-50 p-5 rounded-2xl border border-brand-200 space-y-4">${p.schedule.length?sortBy(p.schedule,'startDate').map(s=>`<div class="pl-6 border-l-2 border-brand-800"><div class="bg-white p-4 rounded-2xl border border-brand-200 space-y-2"><div class="flex justify-between flex-wrap gap-2"><span class="text-xs font-extrabold uppercase">${esc(s.category)} <span class="ml-2 px-2 py-0.5 bg-brand-100 rounded-lg text-[10px]">${fd(s.startDate)} → ${fd(s.endDate)}</span></span><span class="px-2.5 py-1 rounded-xl text-[10px] font-bold ${s.status==='Hoàn thành'?'bg-emerald-100 text-emerald-800':'bg-amber-100 text-amber-800'}">${esc(s.status)} (${s.progress}%)</span></div><div class="w-full bg-brand-100 h-2 rounded-full"><div class="bg-brand-800 h-2 rounded-full" style="width:${Math.min(100,s.progress)}%"></div></div><p class="text-xs font-semibold">${esc(s.detail)}</p><div class="flex justify-between text-[11px]"><span>Nhân sự: <b>${esc(s.staff)}</b></span><span><button onclick="formModal('schedule','${s.id}')" class="text-blue-600 font-bold mr-2">Sửa</button><button onclick="delRow('schedule','${s.id}')" class="text-red-600 font-bold">Xóa</button></span></div></div></div>`).join(''):'<p class="text-center font-bold">Chưa có giai đoạn nào.</p>'}</div>`}
+ if(tab==='timesheet'){
+  const tot=tsPay;
+  h=head('Chấm công ngày',btn('+ Thêm chấm công',"formModal('timesheets')"))+
+  table([{h:'Ngày',f:r=>fd(r.date)},{h:'Họ tên',f:r=>`<b>${esc(r.staffName)}</b>`},{h:'Mã NV',f:r=>esc(r.staffId)},{h:'Đơn giá/h',cls:'text-right',f:r=>money(r.hourlyRate)},{h:'Giờ',cls:'text-center',f:r=>r.hours+'h'},{h:'OT',cls:'text-center',f:r=>r.otHours+'h'},{h:'Thành tiền',cls:'text-right font-bold text-emerald-700',f:r=>money(tot(r))},{h:'Ghi chú',f:r=>esc(r.note)||'-'},acts('timesheets')],sortBy(p.timesheets,'date'))}
+ if(tab==='payroll'){
+  const l=payroll(p),fld=(s,k)=>`<input type="number" value="${s[k]}" onchange="setPay('${esc(s.id)}','${k}',this.value)" class="w-24 text-right bg-brand-50 px-2 py-1 rounded border border-brand-200 font-bold">`;
+  h=head('Bảng lương tổng hợp','')+table([{h:'Mã NV',f:s=>esc(s.id)},{h:'Họ tên',f:s=>`<b>${esc(s.name)}</b>`},{h:'Giờ',cls:'text-center',f:s=>`${s.hours}h (${s.ot}h OT)`},{h:'Lương giờ công (gồm OT)',cls:'text-right',f:s=>money(s.base)},{h:'Xăng xe',cls:'text-right',f:s=>fld(s,'transport')},{h:'Thưởng',cls:'text-right',f:s=>fld(s,'bonus')},{h:'Khác',cls:'text-right',f:s=>fld(s,'other')},{h:'Thực lãnh',cls:'text-right font-extrabold text-emerald-700',f:s=>money(s.total)}],l,
+  `<tfoot><tr class="bg-brand-100 font-extrabold"><td colspan="7" class="p-3">TỔNG QUỸ LƯƠNG</td><td class="p-3 text-right text-emerald-700">${money(st.pay)}</td></tr></tfoot>`)}
+ if(tab==='expenses'){
+  h=`<div class="space-y-5"><div class="bg-brand-50 p-4 rounded-2xl border border-brand-200 flex flex-wrap gap-2 items-center justify-between"><b class="text-xs uppercase">Google Drive hóa đơn & chứng từ</b><div class="flex gap-2"><input id="drive" value="${esc(p.driveFolderLink)}" placeholder="https://drive.google.com/..." class="px-3 py-2 bg-white border border-brand-200 rounded-xl text-xs font-bold w-60">${btn('Lưu','saveDrive()')}${/^https?:/.test(p.driveFolderLink||'')?`<a href="${esc(p.driveFolderLink)}" target="_blank" rel="noopener" class="bg-indigo-700 text-white px-3.5 py-2 rounded-xl font-bold text-xs uppercase">Mở Drive</a>`:''}</div></div>`+
+  head(`Chi phí vật tư & decor (${p.expenses.length})`,btn('+ Thêm chi phí',"formModal('expenses')"))+
+  table([{h:'Ngày',f:r=>fd(r.date)},{h:'Hạng mục',f:r=>`<b>${esc(r.category)}</b>`},{h:'Nội dung',f:r=>esc(r.detail)},{h:'Số tiền',cls:'text-right font-bold text-amber-700',f:r=>money(r.amount)},{h:'Ghi chú',f:r=>esc(r.note)||'-'},acts('expenses')],sortBy(p.expenses,'date'),
+  `<tfoot><tr class="bg-brand-100 font-extrabold"><td colspan="3" class="p-3">TỔNG</td><td class="p-3 text-right text-amber-700">${money(st.exp)}</td><td colspan="2"></td></tr></tfoot>`)+`</div>`}
+ if(tab==='budget'){
+  const pct=v=>st.rev>0?Math.min(100,v/st.rev*100):0,margin=st.rev>0?(st.profit/st.rev*100).toFixed(1):0;
+  const bar=(l,v,col)=>`<div><div class="flex justify-between mb-1 text-xs font-bold"><span>${l} (${money(v)})</span><span>${pct(v).toFixed(1)}%</span></div><div class="bg-brand-100 h-3 rounded-full"><div class="${col} h-3 rounded-full" style="width:${pct(v)}%"></div></div></div>`;
+  h=`<div class="space-y-5"><div class="grid md:grid-cols-3 gap-4">${card('Doanh thu thực tế',money(st.rev),'text-emerald-700')}${card('Tổng chi phí',owner?money(st.cost):'******','text-amber-700')}${card('Lợi nhuận ròng',owner?`${money(st.profit)} (${margin}%)`:'******',st.profit>=0?'text-blue-700':'text-red-700')}</div>
+  <div class="border border-brand-200 rounded-2xl p-5 space-y-4"><h3 class="font-extrabold text-sm uppercase">Cơ cấu chi phí</h3>${owner?bar('Vật tư & decor',st.exp,'bg-amber-600')+bar('Quỹ lương',st.pay,'bg-indigo-600'):'<p class="text-xs">Chỉ Owner xem được.</p>'}</div></div>`}
+ c.innerHTML=h;icons()}
+
+/* ---------- Actions ---------- */
+function toggleChk(id){const i=proj().checklist.find(x=>x.id===id);i.checked=!i.checked;save();renderTab()}
+function copyQuote(){const p=proj();let n=0;p.quotations.forEach(q=>{if(!p.checklist.some(c=>c.item===q.name)){p.checklist.push({id:'chk-'+Date.now()+'-'+n,category:q.category,item:q.name,qty:String(q.qty),personInCharge:'Kho DeeTale',location:p.location,checked:false,note:q.note||''});n++}});save();renderTab();toast(`Đã copy ${n} mục`)}
+function setPay(sid,k,v){const p=proj();p.customPayroll=p.customPayroll||{};(p.customPayroll[sid]=p.customPayroll[sid]||{})[k]=num(v);save();renderTab()}
+function saveDrive(){proj().driveFolderLink=$('drive').value.trim();save();renderTab();toast('Đã lưu link Drive')}
+function saveUrl(){try{localStorage.setItem('deetale_cloud_url',$('as-url').value.trim())}catch(e){}toast('Đã lưu URL Apps Script')}
+function postScript(p){return fetch(p.appScriptUrl,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)})}
+
+function syncNow(){if(!cloudUrl()||!sessPass)return toast('Cần đăng nhập bằng URL Apps Script!');autoSync(proj());toast('Đang đẩy dữ liệu lên Sheet...')}
+function toggleLock(){if(role!=='OWNER')return;const p=proj();p.status=p.status==='Đã đóng'?'Đang hoạt động':'Đã đóng';save();render()}
+
+function exportXlsx(){const p=proj(),wb=XLSX.utils.book_new();
+ XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet([{ID:p.id,Ten:p.title,KhachHang:p.client,Ngay:p.date,DiaDiem:p.location,TrangThai:p.status,DriveLink:p.driveFolderLink||''}]),'TongQuan');
+ [['quotations','BangGia'],['checklist','SoanKho'],['schedule','LichThiCong'],['timesheets','ChamCong'],['expenses','ChiPhiDecor']].forEach(([k,n])=>{if(p[k].length)XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(p[k]),n)});
+ const cp=Object.entries(p.customPayroll||{}).map(([staffId,v])=>({staffId,...v}));if(cp.length)XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(cp),'LuongTuyChinh');
+ try{XLSX.writeFile(wb,'DeeTale_Backup.xlsx');toast('Đã xuất file Excel')}catch(e){toast('Trình duyệt chặn tải file')}}
+
+function importModal(pid){
+ $('modal').innerHTML=box('Nhập báo giá từ Excel',`<select id="imp-proj" class="w-full px-3 py-2 bg-brand-50 border border-brand-200 rounded-xl text-xs font-bold">${projects.map(p=>`<option value="${p.id}" ${p.id===(pid||cur)?'selected':''}>${esc(p.title)}</option>`).join('')}</select><input type="file" id="imp-file" accept=".xlsx,.xls,.csv" class="text-xs font-bold"><p class="text-[11px] text-brand-800">Cột nhận diện: Hạng mục, Tên, SL, ĐVT, Giá gốc, Thực tế, Ghi chú.</p>${btn('Nạp dữ liệu','doImport()')}`)}
+function doImport(){
+ const f=$('imp-file').files[0],p=projects.find(x=>x.id===$('imp-proj').value);if(!f)return toast('Chọn file trước!');
+ const r=new FileReader();r.onload=e=>{try{
+  const ws=XLSX.read(new Uint8Array(e.target.result),{type:'array'}),rows=XLSX.utils.sheet_to_json(ws.Sheets[ws.SheetNames[0]],{header:1});
+  if(rows.length<2)return toast('File không có dữ liệu!');
+  const h=rows[0].map(x=>String(x).toLowerCase()),ix=(keys,d)=>{const i=h.findIndex(x=>keys.some(k=>x.includes(k)));return i<0?d:i};
+  const c=ix(['hạng mục','category'],0),n=ix(['tên','nội dung','công việc','vật tư','name'],1),q=ix(['sl','số lượng','qty'],2),u=ix(['đvt','đơn vị','unit'],3),o=ix(['gốc','original','báo giá'],4),a=ix(['thực tế','actual'],5),nt=ix(['ghi chú','note'],-1);
+  const items=[];for(let i=1;i<rows.length;i++){const w=rows[i];if(!w||!String(w[n]||'').trim())continue;
+   items.push({id:'q-'+Date.now()+'-'+i,category:String(w[c]||'CHUNG').trim(),name:String(w[n]).trim(),qty:num(w[q])||1,unit:String(w[u]||'Gói'),originalPrice:num(w[o]),actualPrice:num(w[a])||num(w[o]),note:nt>=0?String(w[nt]||''):''})}
+  previewImport(p,items)}catch(err){toast('Lỗi đọc file: '+err.message)}};
+ r.readAsArrayBuffer(f)}
+
+/* ---------- Kết nối Google Sheets (Apps Script) ---------- */
+const cloudUrl=()=>{try{return localStorage.getItem('deetale_cloud_url')||''}catch(e){return ''}};
+let sessPass=null,syncTimer=null,syncing=false;const dirtyIds=new Set();
+async function api(body){const r=await fetch(cloudUrl(),{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body)});return r.json()}
+async function cloudLogin(v){
+ toast('Đang kết nối Google Sheets...');
+ try{const d=await api({action:'load',pass:v});
+  if(d.status!=='success'){toast(d.message||'Mật khẩu không chính xác!');return false}
+  role=d.role;sessPass=v;projects=d.projects;access=role==='LEAD'&&projects[0]?projects[0].id:null;
+  if(projects[0])cur=projects[0].id;
+  try{localStorage.setItem('deetale_projects',JSON.stringify(projects))}catch(e){}
+  return true}catch(err){toast('Không kết nối được Apps Script: '+err.message);return false}}
+function autoSync(pp){const p=pp||proj();if(!cloudUrl()||!sessPass||!p)return;dirtyIds.add(p.id);clearTimeout(syncTimer);syncTimer=setTimeout(flush,700)}
+async function flush(){
+ if(syncing){syncTimer=setTimeout(flush,500);return}
+ syncing=true;let ok=false;const ids=[...dirtyIds];dirtyIds.clear();
+ for(const id of ids){const i=projects.findIndex(x=>x.id===id);if(i<0)continue;
+  try{const d=await api({action:'save',pass:sessPass,project:projects[i]});
+   if(d.status==='success'){projects[i]._v=d.version;ok=true}
+   else if(d.status==='conflict'&&d.project){projects[i]=d.project;render();toast('Có người vừa sửa dự án này, đã tải bản mới nhất.')}
+   else toast(d.message||'Lỗi đồng bộ')}
+  catch(e){toast('Lỗi đồng bộ: '+e.message)}}
+ syncing=false;try{localStorage.setItem('deetale_projects',JSON.stringify(projects))}catch(e){}
+ if(ok)toast('Đã lưu lên Google Sheets')}
+async function reloadCloud(){
+ if(!cloudUrl()||!sessPass)return toast('Cần đăng nhập bằng URL Apps Script!');
+ try{const d=await api({action:'load',pass:sessPass});if(d.status!=='success')return toast(d.message);
+  projects=d.projects;if(!projects.some(p=>p.id===cur)&&projects[0])cur=projects[0].id;render();toast('Đã tải dữ liệu mới từ Google Sheets')}catch(e){toast('Lỗi: '+e.message)}}
+$('cloud-url').value=cloudUrl();
+
+let pend=null,lastImport=null;
+const qKey=q=>[q.category,q.name,q.originalPrice].join('|').toLowerCase();
+function previewImport(p,items){
+ const have=new Set(p.quotations.map(qKey));items.forEach(x=>x.dup=have.has(qKey(x)));
+ pend={p,items};const d=items.filter(x=>x.dup).length;
+ $('modal').innerHTML=box('Xem trước khi nhập',`<p class="text-xs">Tìm thấy <b>${items.length}</b> dòng: <b class="text-emerald-700">${items.length-d} mới</b>, <b class="text-amber-700">${d} trùng</b> với bảng giá hiện có.</p><div class="max-h-60 overflow-y-auto border border-brand-200 rounded-xl divide-y divide-brand-200 text-xs">${items.map(x=>`<div class="p-2 flex justify-between gap-2 ${x.dup?'bg-amber-50':''}"><span>${esc(x.category)} – ${esc(x.name)}</span><b>${x.dup?'Trùng':money(x.originalPrice)}</b></div>`).join('')}</div><label class="flex items-center gap-2 text-xs font-bold"><input type="checkbox" id="skip-dup" ${d?'checked':''}> Bỏ qua các dòng trùng</label>${btn('Xác nhận nhập','applyImport()')}`,'max-w-lg')}
+function applyImport(){
+ const {p,items}=pend,skip=$('skip-dup').checked,add=items.filter(x=>!(skip&&x.dup)).map(({dup,...q})=>q);
+ p.quotations.push(...add);lastImport={pid:p.id,ids:add.map(x=>x.id)};
+ save(p);closeModal();render();if(!$('landing').classList.contains('hidden'))openLanding();toast(`Đã nhập ${add.length} hạng mục`)}
+function undoImport(){if(!lastImport)return;const p=projects.find(x=>x.id===lastImport.pid);p.quotations=p.quotations.filter(q=>!lastImport.ids.includes(q.id));lastImport=null;save(p);renderTab();toast('Đã hoàn tác lần nhập Excel')}
+const SHEETS={BangGia:'quotations',SoanKho:'checklist',LichThiCong:'schedule',ChamCong:'timesheets',ChiPhiDecor:'expenses'};
+function restoreModal(){if(role!=='OWNER')return;$('modal').innerHTML=box('Khôi phục từ file sao lưu',`<p class="text-xs text-red-700 font-bold">Toàn bộ dữ liệu các tab của dự án hiện tại sẽ bị thay bằng nội dung trong file.</p><input type="file" id="rs-file" accept=".xlsx" class="text-xs font-bold">${btn('Khôi phục','doRestore()','bg-red-700')}`)}
+function doRestore(){
+ const f=$('rs-file').files[0];if(!f)return toast('Chọn file sao lưu!');
+ const r=new FileReader();r.onload=e=>{try{
+  const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
+  if(!wb.SheetNames.includes('TongQuan'))return toast('Không phải file sao lưu DeeTale!');
+  const p=proj(),get=n=>wb.Sheets[n]?XLSX.utils.sheet_to_json(wb.Sheets[n]):[];
+  Object.entries(SHEETS).forEach(([sn,k])=>{p[k]=get(sn)});
+  const cp={};get('LuongTuyChinh').forEach(({staffId,...v})=>{cp[staffId]=v});p.customPayroll=cp;
+  const t=get('TongQuan')[0];if(t&&t.DriveLink)p.driveFolderLink=t.DriveLink;
+  save();closeModal();render();toast('Đã khôi phục dữ liệu')}catch(err){toast('Lỗi: '+err.message)}};
+ r.readAsArrayBuffer(f)}
+function newProject(){if(role!=='OWNER')return;
+ const f=(id,l,t='text')=>`<div><label class="block text-[11px] font-bold uppercase text-brand-800 mb-1">${l}</label><input id="${id}" type="${t}" required class="w-full px-3 py-2 bg-brand-50 border border-brand-200 rounded-xl text-xs font-bold"></div>`;
+ $('modal').innerHTML=box('Tạo dự án mới',`<form onsubmit="createProject(event)" class="space-y-3" autocomplete="off">${f('np-t','Tên dự án')}${f('np-c','Khách hàng')}${f('np-d','Ngày tổ chức','date')}${f('np-l','Địa điểm')}${f('np-p','Mật khẩu cho Lead','password')}<button class="w-full bg-brand-900 text-white py-3 rounded-xl font-extrabold text-xs uppercase">Tạo</button></form>`)}
+function createProject(e){e.preventDefault();const id='proj-'+Date.now();
+ projects.push({id,title:$('np-t').value.trim(),client:$('np-c').value.trim(),date:$('np-d').value.trim(),location:$('np-l').value.trim(),status:'Đang hoạt động',projectPassword:$('np-p').value.trim(),appScriptUrl:'',driveFolderLink:'',quotations:[],checklist:[],schedule:[],timesheets:[],expenses:[],customPayroll:{}});
+ cur=id;save();closeModal();openLanding();toast('Đã tạo dự án')}
+
+/* ---------- Views ---------- */
+async function login(e){e.preventDefault();const v=$('pass').value.trim();$('pass').value='';
+ const u=$('cloud-url').value.trim();try{localStorage.setItem('deetale_cloud_url',u)}catch(x){}
+ if(u){if(!await cloudLogin(v))return;$('login').classList.add('hidden');openLanding();toast('Đăng nhập thành công: '+role);return}
+ if(v==='1015'){role='OWNER';access=null}
+ else{const m=projects.find(p=>p.projectPassword===v);if(!m)return toast('Mật khẩu không chính xác!');role='LEAD';access=m.id;cur=m.id}
+ $('login').classList.add('hidden');openLanding();toast('Đăng nhập thành công: '+role)}
+function logout(){role=access=sessPass=null;closeModal();$('login').classList.remove('hidden');$('landing').classList.add('hidden')}
+function openLanding(){
+ if(!role)return;$('landing').classList.remove('hidden');const owner=role==='OWNER';
+ $('l-role').textContent='Vai trò: '+role;$('l-new').classList.toggle('hidden',!owner);$('l-owner').classList.toggle('hidden',!owner);
+ if(owner){let r=0,c=0;projects.forEach(p=>{const s=stats(p);r+=s.rev;c+=s.cost});$('l-owner').innerHTML=card('Tổng thu nhập',money(r),'text-emerald-700')+card('Tổng chi phí',money(c),'text-amber-700')+card('Lợi nhuận studio',money(r-c),'text-blue-700')}
+ const list=owner?projects:projects.filter(p=>p.id===access);
+ $('l-list').innerHTML=list.map(p=>`<div class="bg-brand-50 p-5 rounded-2xl border border-brand-200 space-y-3"><div class="flex justify-between"><span class="px-2.5 py-1 rounded-lg text-[10px] font-bold ${p.status==='Đang hoạt động'?'bg-emerald-100 text-emerald-800':'bg-red-100 text-red-800'}">${esc(p.status)}</span><span class="text-xs font-bold">${fd(p.date)}</span></div><h4 class="font-extrabold text-sm">${esc(p.title)}</h4><p class="text-xs">Khách: ${esc(p.client)} | ${esc(p.location)}</p><button onclick="enter('${p.id}')" class="w-full bg-brand-900 text-white py-2.5 rounded-xl font-bold text-xs uppercase">Vào quản lý →</button></div>`).join('')||'<p class="col-span-2 text-center">Không có dự án.</p>'}
+function enter(id){cur=id;tab='overview';$('landing').classList.add('hidden');render()}
+function render(){
+ const owner=role==='OWNER',list=owner?projects.filter(p=>p.status!=='Đã đóng'||p.id===cur):projects.filter(p=>p.id===access);
+ $('sel').innerHTML=list.map(p=>`<option value="${p.id}" ${p.id===cur?'selected':''}>${esc(p.title)} (${fd(p.date)})</option>`).join('');
+ const p=proj();if(!p)return;
+ $('badge').innerHTML=`<span class="px-3 py-1 rounded-xl text-xs font-bold ${p.status==='Đang hoạt động'?'bg-emerald-100 text-emerald-800':'bg-red-100 text-red-800'}">${esc(p.status)}</span>`;
+ $('meta').innerHTML=`<b>Khách:</b> ${esc(p.client)} • <b>Ngày:</b> ${fd(p.date)} • <b>Venue:</b> ${esc(p.location)}`;
+ $('role-text').textContent='Vai trò: '+role;$('btn-lock').classList.toggle('hidden',!owner);$('btn-restore').classList.toggle('hidden',!owner);$('btn-lock').textContent=p.status==='Đã đóng'?'Mở dự án':'Đóng dự án';
+ drawTabs();renderTab()}
+</script>
+</body>
+</html>
